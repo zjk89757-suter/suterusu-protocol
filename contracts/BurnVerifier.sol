@@ -89,49 +89,49 @@ contract BurnVerifier {
     }
 
     function verify(BurnStatement memory statement, BurnProof memory proof) internal view returns (bool) {
-        uint256 statementHash = uint256(keccak256(abi.encode(statement.CLn, statement.CRn, statement.y, statement.epoch, statement.sender))).mod(); // stacktoodeep?
+        uint256 statementHash = uint256(keccak256(abi.encode(statement.CLn, statement.CRn, statement.y, statement.epoch, statement.sender))).gMod(); // stacktoodeep?
 
         BurnAuxiliaries memory burnAuxiliaries;
-        burnAuxiliaries.y = uint256(keccak256(abi.encode(statementHash, proof.BA, proof.BS))).mod();
+        burnAuxiliaries.y = uint256(keccak256(abi.encode(statementHash, proof.BA, proof.BS))).gMod();
         burnAuxiliaries.ys[0] = 1;
         burnAuxiliaries.k = 1;
         for (uint256 i = 1; i < 32; i++) {
-            burnAuxiliaries.ys[i] = burnAuxiliaries.ys[i - 1].mul(burnAuxiliaries.y);
-            burnAuxiliaries.k = burnAuxiliaries.k.add(burnAuxiliaries.ys[i]);
+            burnAuxiliaries.ys[i] = burnAuxiliaries.ys[i - 1].gMul(burnAuxiliaries.y);
+            burnAuxiliaries.k = burnAuxiliaries.k.gAdd(burnAuxiliaries.ys[i]);
         }
-        burnAuxiliaries.z = uint256(keccak256(abi.encode(burnAuxiliaries.y))).mod();
-        burnAuxiliaries.zs = [burnAuxiliaries.z.exp(2)];
-        burnAuxiliaries.zSum = burnAuxiliaries.zs[0].mul(burnAuxiliaries.z); // trivial sum
-        burnAuxiliaries.k = burnAuxiliaries.k.mul(burnAuxiliaries.z.sub(burnAuxiliaries.zs[0])).sub(burnAuxiliaries.zSum.mul(2 ** 32).sub(burnAuxiliaries.zSum));
-        burnAuxiliaries.t = proof.tHat.sub(burnAuxiliaries.k);
+        burnAuxiliaries.z = uint256(keccak256(abi.encode(burnAuxiliaries.y))).gMod();
+        burnAuxiliaries.zs = [burnAuxiliaries.z.gExp(2)];
+        burnAuxiliaries.zSum = burnAuxiliaries.zs[0].gMul(burnAuxiliaries.z); // trivial sum
+        burnAuxiliaries.k = burnAuxiliaries.k.gMul(burnAuxiliaries.z.gSub(burnAuxiliaries.zs[0])).gSub(burnAuxiliaries.zSum.gMul(2 ** 32).gSub(burnAuxiliaries.zSum));
+        burnAuxiliaries.t = proof.tHat.gSub(burnAuxiliaries.k);
         for (uint256 i = 0; i < 32; i++) {
-            burnAuxiliaries.twoTimesZSquared[i] = burnAuxiliaries.zs[0].mul(2 ** i);
+            burnAuxiliaries.twoTimesZSquared[i] = burnAuxiliaries.zs[0].gMul(2 ** i);
         }
 
-        burnAuxiliaries.x = uint256(keccak256(abi.encode(burnAuxiliaries.z, proof.tCommits))).mod();
-        burnAuxiliaries.tEval = proof.tCommits[0].mul(burnAuxiliaries.x).add(proof.tCommits[1].mul(burnAuxiliaries.x.mul(burnAuxiliaries.x))); // replace with "commit"?
+        burnAuxiliaries.x = uint256(keccak256(abi.encode(burnAuxiliaries.z, proof.tCommits))).gMod();
+        burnAuxiliaries.tEval = proof.tCommits[0].pMul(burnAuxiliaries.x).pAdd(proof.tCommits[1].pMul(burnAuxiliaries.x.gMul(burnAuxiliaries.x))); // replace with "commit"?
 
         SigmaAuxiliaries memory sigmaAuxiliaries;
-        sigmaAuxiliaries.A_y = Utils.g().mul(proof.s_sk).add(statement.y.mul(proof.c.neg()));
-        sigmaAuxiliaries.A_b = Utils.g().mul(proof.s_b).add(statement.CRn.mul(proof.s_sk).add(statement.CLn.mul(proof.c.neg())).mul(burnAuxiliaries.zs[0]));
-        sigmaAuxiliaries.A_t = Utils.g().mul(burnAuxiliaries.t).add(burnAuxiliaries.tEval.neg()).mul(proof.c).add(Utils.h().mul(proof.s_tau)).add(Utils.g().mul(proof.s_b.neg()));
+        sigmaAuxiliaries.A_y = Utils.g().pMul(proof.s_sk).pAdd(statement.y.pMul(proof.c.gNeg()));
+        sigmaAuxiliaries.A_b = Utils.g().pMul(proof.s_b).pAdd(statement.CRn.pMul(proof.s_sk).pAdd(statement.CLn.pMul(proof.c.gNeg())).pMul(burnAuxiliaries.zs[0]));
+        sigmaAuxiliaries.A_t = Utils.g().pMul(burnAuxiliaries.t).pAdd(burnAuxiliaries.tEval.pNeg()).pMul(proof.c).pAdd(Utils.h().pMul(proof.s_tau)).pAdd(Utils.g().pMul(proof.s_b.gNeg()));
         sigmaAuxiliaries.gEpoch = Utils.mapInto("Zether", statement.epoch);
-        sigmaAuxiliaries.A_u = sigmaAuxiliaries.gEpoch.mul(proof.s_sk).add(statement.u.mul(proof.c.neg()));
+        sigmaAuxiliaries.A_u = sigmaAuxiliaries.gEpoch.pMul(proof.s_sk).pAdd(statement.u.pMul(proof.c.gNeg()));
 
-        sigmaAuxiliaries.c = uint256(keccak256(abi.encode(burnAuxiliaries.x, sigmaAuxiliaries.A_y, sigmaAuxiliaries.A_b, sigmaAuxiliaries.A_t, sigmaAuxiliaries.A_u))).mod();
+        sigmaAuxiliaries.c = uint256(keccak256(abi.encode(burnAuxiliaries.x, sigmaAuxiliaries.A_y, sigmaAuxiliaries.A_b, sigmaAuxiliaries.A_t, sigmaAuxiliaries.A_u))).gMod();
         require(sigmaAuxiliaries.c == proof.c, "Sigma protocol challenge equality failure.");
 
         IPAuxiliaries memory ipAuxiliaries;
-        ipAuxiliaries.o = uint256(keccak256(abi.encode(sigmaAuxiliaries.c))).mod();
-        ipAuxiliaries.u_x = Utils.g().mul(ipAuxiliaries.o);
+        ipAuxiliaries.o = uint256(keccak256(abi.encode(sigmaAuxiliaries.c))).gMod();
+        ipAuxiliaries.u_x = Utils.g().pMul(ipAuxiliaries.o);
         ipAuxiliaries.hPrimes = new Utils.G1Point[](32);
         for (uint256 i = 0; i < 32; i++) {
-            ipAuxiliaries.hPrimes[i] = ip.hs(i).mul(burnAuxiliaries.ys[i].inv());
-            ipAuxiliaries.hPrimeSum = ipAuxiliaries.hPrimeSum.add(ipAuxiliaries.hPrimes[i].mul(burnAuxiliaries.ys[i].mul(burnAuxiliaries.z).add(burnAuxiliaries.twoTimesZSquared[i])));
+            ipAuxiliaries.hPrimes[i] = ip.hs(i).pMul(burnAuxiliaries.ys[i].gInv());
+            ipAuxiliaries.hPrimeSum = ipAuxiliaries.hPrimeSum.pAdd(ipAuxiliaries.hPrimes[i].pMul(burnAuxiliaries.ys[i].gMul(burnAuxiliaries.z).gAdd(burnAuxiliaries.twoTimesZSquared[i])));
         }
-        ipAuxiliaries.P = proof.BA.add(proof.BS.mul(burnAuxiliaries.x)).add(gSum().mul(burnAuxiliaries.z.neg())).add(ipAuxiliaries.hPrimeSum);
-        ipAuxiliaries.P = ipAuxiliaries.P.add(Utils.h().mul(proof.mu.neg()));
-        ipAuxiliaries.P = ipAuxiliaries.P.add(ipAuxiliaries.u_x.mul(proof.tHat));
+        ipAuxiliaries.P = proof.BA.pAdd(proof.BS.pMul(burnAuxiliaries.x)).pAdd(gSum().pMul(burnAuxiliaries.z.gNeg())).pAdd(ipAuxiliaries.hPrimeSum);
+        ipAuxiliaries.P = ipAuxiliaries.P.pAdd(Utils.h().pMul(proof.mu.gNeg()));
+        ipAuxiliaries.P = ipAuxiliaries.P.pAdd(ipAuxiliaries.u_x.pMul(proof.tHat));
         require(ip.verifyInnerProduct(ipAuxiliaries.hPrimes, ipAuxiliaries.u_x, ipAuxiliaries.P, proof.ipProof, ipAuxiliaries.o), "Inner product proof verification failed.");
 
         return true;
