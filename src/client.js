@@ -2,6 +2,7 @@ const BN = require('bn.js');
 const utils = require('./utils/utils.js');
 const bn128 = require('./utils/bn128.js');
 const elgamal = require('./utils/elgamal.js');
+const Service = require('./utils/service.js'); 
 
 var sleep = (wait) => new Promise((resolve) => {
     setTimeout(resolve, wait);
@@ -33,6 +34,8 @@ class Client {
         // Reference: https://stackoverflow.com/questions/20279484/how-to-access-the-correct-this-inside-a-callback
         var that = this;
 
+        var service = new Service();
+
         this.gasLimit = 5470000;
 
         // TODO: set transaction confirmation blocks for testing?
@@ -42,6 +45,12 @@ class Client {
 
         (async function() {
             that.epochLength = await that.suter.methods.epochLength().call();
+
+            // The amount of tokens represented by one unit.
+            // Most of the time, one token is too small and it is not worthwhile to use private 
+            // transaction for such small amount. Hence in Suter, we contrain all private operations 
+            // to take place in terms of unit that can represent a large amount of tokens. For example,
+            // a reasonable choice of 1 unit could be 1e16 wei (0.01 ETH).
             that.unit = await that.suter.methods.unit().call();
         })();
 
