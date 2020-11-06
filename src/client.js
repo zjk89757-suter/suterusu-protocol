@@ -9,6 +9,13 @@ var sleep = (wait) => new Promise((resolve) => {
 
 
 class Client {
+    /**
+    Constrct a client, with given web3 object, Suter contract, and home account (Ethereum address). 
+
+    @param web3 A web3 object.
+    @param suter The Suter contract address.
+    @param home The home account (Ethereum address).
+    */
     constructor(web3, suter, home) {
         if (web3 === undefined)
             throw "1st arg should be an initialized Web3 object.";
@@ -38,21 +45,34 @@ class Client {
             that.unit = await that.suter.methods.unit().call();
         })();
 
-        // TODO: should change to block based.
-        // This epoch is based on time, and does not start from 0, because it simply divides the timestamp by epoch length.
+        /**
+        Get the epoch corresponding to the given timestamp (if not given, use current time).
+        This epoch is based on time, and does not start from 0, because it simply divides the timestamp by epoch length.
+
+        TODO: should change to block based.
+
+        @param timestamp The given timestamp. Use current time if it is not given.
+
+        @return The epoch corresponding to the timestamp (current time if not given).
+        */
         this._getEpoch = (timestamp) => {
             return Math.floor((timestamp === undefined ? (new Date).getTime() / 1000 : timestamp) / that.epochLength);
         };
 
-        // ms away from next epoch change
-        // TODO: should change to block based
+        /**
+        Get ms away from next epoch change.
+
+        TODO: should change to block based.
+        */
         this._away = () => {
             var current = (new Date).getTime();
             return Math.ceil(current / (that.epochLength * 1000)) * (that.epochLength * 1000) - current;
         };
  
 
-        // TODO: this is only simulating the progress, have to change to something real
+        /**
+        Suter account, containing various information such as the public/private key pair, balance, etc.
+        */
         this.account = new function() {
             this.keypair = undefined;
             this._state = {
@@ -113,6 +133,20 @@ class Client {
             });
         };
 
+        /**
+        [With transaction]
+        Register a public/private key pair, stored in this client's Suter account.
+        This key pair is used for private interaction with the Suter contract.
+        NOTE: this key pair is NOT an Ethereum address, but instead, it should normally
+        be used together with an Ethereum account address for the connection between
+        Suter and plain Ethereum token.
+
+        @param secret The private key. If not given, then a new public/private key pair is
+            generated, otherwise construct the public/private key pair form the private key.
+
+        @return A promise that is resolved (or rejected) with the execution status of the
+            registraction transaction.
+        */
         this.register = (secret) => {
             return new Promise((resolve, reject) => {
                 if (secret === undefined) {
@@ -145,6 +179,20 @@ class Client {
             });
         };
 
+        /**
+        [With transaction]
+        Deposit a given amount of tokens in the Suter account.
+        This essentially converts plain tokens to Suter tokens that are encrypted in the Suter contract.
+        In other words, X tokens are deducted from this client's home account (Ethereum address), and X Suter
+        tokens are added to this client's Suter account.
+
+        The amount is represented in terms of a pre-defined unit. For example, if one unit represents 0.01 ETH,
+        then an amount of 100 represents 1 ETH.
+
+        @param value The amount to be deposited into the Suter account, in terms of unit.
+
+        @return A promise that is resolved (or rejected) with the execution status of the deposit transaction.
+        */
         this.deposit = (value) => {
             that.checkRegistered();
             that.checkValue();
@@ -169,6 +217,19 @@ class Client {
             });
         };
 
+        /**
+        [With transaction]
+        Withdraw a given amount of tokens from the Suter account, if there is sufficient balance.
+        This essentially converts Suter tokens to plain tokens, with X Suter tokens deducted from
+        this client's Suter account and X plain tokens added to this client's home account.
+
+        The amount is represented in terms of a pre-defined unit. For example, if one unit represents 0.01 ETH,
+        then an amount of 100 represents 1 ETH.
+
+        @param value The amount to be deposited into the Suter account, in terms of unit.
+
+        @return A promise that is resolved (or rejected) with the execution status of the deposit transaction.
+        */
         this.withdraw = (value) => {
             that.checkRegistered();
             that.checkValue();
