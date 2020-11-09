@@ -471,7 +471,7 @@ class Client {
             const anonymitySize = 2;
             var estimated = estimate(anonymitySize, false);
             if (estimated > that.epochLength * 1000)
-                throw "The anonymity size (" + size + ") you've requested might take longer than the epoch length (" + that.epochLength + " seconds) to prove. Consider re-deploying, with an epoch length at least " + Math.ceil(estimate(size, true) / 1000) + " seconds.";
+                throw "The anonymity size (" + anonymitySize + ") you've requested might take longer than the epoch length (" + that.epochLength + " seconds) to prove. Consider re-deploying, with an epoch length at least " + Math.ceil(estimate(anonymitySize, true) / 1000) + " seconds.";
 
             // Heuristic condition to help reduce the possibility of failed transaction.
             // If the estimated execution time is longer than the remaining time of this epoch, then 
