@@ -115,7 +115,7 @@ contract BurnVerifier {
         sigmaAuxiliaries.A_y = Utils.g().pMul(proof.s_sk).pAdd(statement.y.pMul(proof.c.gNeg()));
         sigmaAuxiliaries.A_b = Utils.g().pMul(proof.s_b).pAdd(statement.CRn.pMul(proof.s_sk).pAdd(statement.CLn.pMul(proof.c.gNeg())).pMul(burnAuxiliaries.zs[0]));
         sigmaAuxiliaries.A_t = Utils.g().pMul(burnAuxiliaries.t).pAdd(burnAuxiliaries.tEval.pNeg()).pMul(proof.c).pAdd(Utils.h().pMul(proof.s_tau)).pAdd(Utils.g().pMul(proof.s_b.gNeg()));
-        sigmaAuxiliaries.gEpoch = Utils.mapInto("Zether", statement.epoch);
+        sigmaAuxiliaries.gEpoch = Utils.mapInto("Suter", statement.epoch);
         sigmaAuxiliaries.A_u = sigmaAuxiliaries.gEpoch.pMul(proof.s_sk).pAdd(statement.u.pMul(proof.c.gNeg()));
 
         sigmaAuxiliaries.c = uint256(keccak256(abi.encode(burnAuxiliaries.x, sigmaAuxiliaries.A_y, sigmaAuxiliaries.A_b, sigmaAuxiliaries.A_t, sigmaAuxiliaries.A_u))).gMod();

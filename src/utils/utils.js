@@ -33,7 +33,7 @@ utils.sign = (address, keypair) => {
         'bytes32[2]',
     ], [
         address,
-        keypair['y'],
+        bn128.serialize(keypair['y']),
         bn128.serialize(K),
     ]));
 
@@ -43,14 +43,14 @@ utils.sign = (address, keypair) => {
 
 utils.createAccount = () => {
     var x = bn128.randomScalar();
-    var y = bn128.serialize(bn128.curve.g.mul(x));
+    var y = bn128.curve.g.mul(x);
     return { 'x': x, 'y': y };
 };
 
 utils.keyPairFromSecret = (secret) => {
     // secret should be a serialized string like "0x...". We use slice to remove the heading "0x".
     var x = new BN(secret.slice(2), 16).toRed(bn128.q);
-    var y = bn128.serialize(bn128.curve.g.mul(x));
+    var y = bn128.curve.g.mul(x);
     return {'x': x, 'y': y}; 
 };
 
@@ -68,7 +68,7 @@ utils.mapInto = (seed) => { // seed is flattened 0x + hex string
 };
 
 utils.gEpoch = (epoch) => {
-    return utils.mapInto(soliditySha3("Zether", epoch));
+    return utils.mapInto(soliditySha3("Suter", epoch));
 };
 
 utils.u = (epoch, x) => {

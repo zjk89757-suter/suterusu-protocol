@@ -4,8 +4,8 @@ pragma experimental ABIEncoderV2;
 
 import "./Utils.sol";
 //import "./InnerProductVerifier.sol";
-//import "./ZetherVerifier.sol";
-//import "./BurnVerifier.sol";
+import "./TransferVerifier.sol";
+import "./BurnVerifier.sol";
 
 contract SuterETH {
     mapping(address => uint256) plainBalances;
@@ -14,8 +14,8 @@ contract SuterETH {
     using Utils for Utils.G1Point;
 
     //CashToken coin;
-    //ZetherVerifier zetherverifier;
-    //BurnVerifier burnverifier;
+    TransferVerifier transferverifier;
+    BurnVerifier burnverifier;
     uint256 public epochLength; // TODO: now in seconds, need to change to # blocks.
 
     /* 
@@ -38,7 +38,7 @@ contract SuterETH {
     uint256 lastGlobalUpdate = 0; // will be also used as a proxy for "current epoch", seeing as rollovers will be anticipated
     //// not implementing account locking for now...revisit
 
-    //event TransferOccurred(Utils.G1Point[] parties); // all parties will be notified, client can determine whether it was real or not.
+    event TransferOccurred(Utils.G1Point[] parties); // all parties will be notified, client can determine whether it was real or not.
     //// arg is still necessary for transfers---not even so much to know when you received a transfer, as to know when you got rolled over.
 
     //constructor(address _coin, address _zether, address _burn, uint256 _epochLength) public {
@@ -49,7 +49,9 @@ contract SuterETH {
         //epochLength = _epochLength;
     //}
 
-    constructor(uint256 _epochLength) public {
+    constructor(address _transfer, address _burn, uint256 _epochLength) public {
+        transferverifier = TransferVerifier(_transfer);
+        burnverifier = BurnVerifier(_burn);
         epochLength = _epochLength;
     }
 
@@ -126,6 +128,13 @@ contract SuterETH {
         }
     }
 
+    function getAccountState (Utils.G1Point memory y) public view returns (Utils.G1Point[2] memory y_available, Utils.G1Point[2] memory y_pending) {
+        bytes32 yHash = keccak256(abi.encode(y));
+        y_available = acc[yHash];
+        y_pending = pending[yHash];
+        return (y_available, y_pending);
+    }
+
     function rollOver(bytes32 yHash) internal {
         uint256 e = block.timestamp / epochLength;
         if (lastRollOver[yHash] < e) {
@@ -153,10 +162,6 @@ contract SuterETH {
         scratch = scratch.pAdd(Utils.g().pMul(amount));
         pending[yHash][0] = scratch;
 
-        // >>> DEGUB
-        plainBalances[msg.sender] += amount;
-        // <<< DEBUG
-
         require(address(this).balance <= (MAX * unit), "Fund pushes contract past maximum value.");
     }
 
@@ -176,16 +181,43 @@ contract SuterETH {
         }
         nonceSet.push(uHash);
 
-        // TODO: Proof
-        //require(burnverifier.verifyBurn(scratch[0], scratch[1], y, lastGlobalUpdate, u, msg.sender, proof), "Burn proof verification failed!");
+        require(burnverifier.verifyBurn(scratch[0], scratch[1], y, lastGlobalUpdate, u, msg.sender, proof), "Burn proof verification failed!");
         
-        // >>> DEBUG
-        require(plainBalances[msg.sender] >= amount, "Withdraw more fund than available!");
-        plainBalances[msg.sender] -= amount;
-        // <<< DEBUG
-
         msg.sender.transfer(amount * unit);
     }
+
+    function transfer(Utils.G1Point[] memory C, Utils.G1Point memory D, Utils.G1Point[] memory y, Utils.G1Point memory u, bytes memory proof) public {
+        // TODO: check that sender and receiver should NOT be equal.
+        uint256 size = y.length;
+        Utils.G1Point[] memory CLn = new Utils.G1Point[](size);
+        Utils.G1Point[] memory CRn = new Utils.G1Point[](size);
+        require(C.length == size, "Input array length mismatch!");
+
+        for (uint256 i = 0; i < size; i++) {
+            bytes32 yHash = keccak256(abi.encode(y[i]));
+            require(registered(yHash), "Account not yet registered.");
+            rollOver(yHash);
+            Utils.G1Point[2] memory scratch = pending[yHash];
+            pending[yHash][0] = scratch[0].pAdd(C[i]);
+            pending[yHash][1] = scratch[1].pAdd(D);
+            // pending[yHash] = scratch; // can't do this, so have to use 2 sstores _anyway_ (as in above)
+
+            scratch = acc[yHash];
+            CLn[i] = scratch[0].pAdd(C[i]);
+            CRn[i] = scratch[1].pAdd(D);
+        }
+
+        bytes32 uHash = keccak256(abi.encode(u));
+        for (uint256 i = 0; i < nonceSet.length; i++) {
+            require(nonceSet[i] != uHash, "Nonce already seen!");
+        }
+        nonceSet.push(uHash);
+
+        require(transferverifier.verifyTransfer(CLn, CRn, C, D, y, lastGlobalUpdate, u, proof), "Transfer proof verification failed!");
+
+        emit TransferOccurred(y);
+    }
+
 
     //function registered(bytes32 yHash) internal view returns (bool) {
         //Utils.G1Point memory zero = Utils.G1Point(0, 0);

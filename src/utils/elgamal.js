@@ -5,13 +5,21 @@ const elgamal = {};
 
 elgamal.MAX_PLAIN = 2**32 - 1;
 
+elgamal.encrypt = (m, y, r) => {
+    if (r === undefined)
+        r = bn128.randomScalar(); 
+    var CL = bn128.curve.g.mul(m).add(y.mul(r))
+    var CR = bn128.curve.g.mul(r); 
+    return [CL, CR];
+};
+
 /**
-ct is serialized ElGamal ciphertext, x is a BN.
+ct is an ElGamal ciphertext, x is a BN.
 TODO: This could be slow if we don't provide an initial guess for the balance. Need to optimize.
 */
 elgamal.decrypt = (ct, x) => {
-    CL = bn128.unserialize(ct[0]);
-    CR = bn128.unserialize(ct[1]);
+    var CL = ct[0];
+    var CR = ct[1];
     var gB = CL.add(CR.mul(x.redNeg()));
 
     var accumulator = bn128.zero;
@@ -25,7 +33,7 @@ elgamal.decrypt = (ct, x) => {
 };
 
 elgamal.addPlain = (ct, plain) => {
-    var cL = bn128.serialize(bn128.unserialize(ct[0]).add(bn128.curve.g.mul(plain)));
+    var cL = ct[0].add(bn128.curve.g.mul(plain));
     var cR = ct[1];
     return [cL, cR];
 };
@@ -34,4 +42,12 @@ elgamal.subPlain = (ct, plain) => {
     return elgamal.addPlain(ct, -plain);
 };
 
-module.exports = elgamal
+elgamal.serialize = (ct) => {
+    return [bn128.serialize(ct[0]), bn128.serialize(ct[1])];
+};
+
+elgamal.unserialize = (serialized) => {
+    return [bn128.unserialize(serialized[0]), bn128.unserialize(serialized[1])];
+};
+
+module.exports = elgamal;
