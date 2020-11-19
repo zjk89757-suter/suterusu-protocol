@@ -47,9 +47,15 @@ utils.createAccount = () => {
     return { 'x': x, 'y': y };
 };
 
+//utils.keyPairFromSecret = (secret) => {
+    //// secret should be a serialized string like "0x...". We use slice to remove the heading "0x".
+    //var x = new BN(secret.slice(2), 16).toRed(bn128.q);
+    //var y = bn128.curve.g.mul(x);
+    //return {'x': x, 'y': y}; 
+//};
+
 utils.keyPairFromSecret = (secret) => {
-    // secret should be a serialized string like "0x...". We use slice to remove the heading "0x".
-    var x = new BN(secret.slice(2), 16).toRed(bn128.q);
+    var x = utils.hash(secret + "ETH"); 
     var y = bn128.curve.g.mul(x);
     return {'x': x, 'y': y}; 
 };

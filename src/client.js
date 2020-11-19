@@ -3,6 +3,8 @@ const utils = require('./utils/utils.js');
 const bn128 = require('./utils/bn128.js');
 const elgamal = require('./utils/elgamal.js');
 const Service = require('./utils/service.js'); 
+const ABICoder = require('web3-eth-abi');
+const { soliditySha3 } = require('web3-utils');
 
 var sleep = (wait) => new Promise((resolve) => {
     setTimeout(resolve, wait);
@@ -189,6 +191,11 @@ class Client {
                 return bn128.bytes(this.keypair['x']);
             };
 
+            this.publicKeyHash = () => {
+                var encoded = ABICoder.encodeParameter("bytes32[2]", this.publicKeySerialized());
+                return soliditySha3(encoded); 
+            };
+
         };
 
         this.checkRegistered = () => {
@@ -267,27 +274,35 @@ class Client {
         this.register = (secret) => {
             return new Promise((resolve, reject) => {
                 if (secret === undefined) {
-                    var keypair = utils.createAccount();
-                    var [c, s] = utils.sign(that.suter._address, keypair);
-                    that.suter.methods.register(bn128.serialize(keypair['y']), c, s)
+                    that.accout.keypair = utils.createAccount();
+                } else {
+                    that.account.keypair = utils.keypairFromSecret(secret);
+                }
+                var isRegistered;
+                (async function() {
+                    isRegistered = await that.suter.methods.registered(that.account.publicKeyHash()).call();
+                })(); 
+                if (isRegistered) {
+                    // This branch would recover the account previously bound to the secret, and the corresponding balance.
+                    that.syncAccountState();
+                    resolve();
+                } else {
+
+                    var [c, s] = utils.sign(that.suter._address, that.accout.keypair);
+                    that.suter.methods.register(that.account.publicKeySerialized(), c, s)
                         .send({from: that.home, gas: that.gasLimit})
                         .on('transactionHash', (hash) => {
                             console.log("Registration submitted (txHash = \"" + hash + "\").");
                         })
                         .on('receipt', (receipt) => {
-                            that.account.keypair = keypair;
                             console.log("Registration successful.");
                             resolve(receipt);
                         })
                         .on('error', (error) => {
+                            that.account.keypair = undefined;
                             console.log("Registration failed: " + error);
                             reject(error);
                         });
-                } else {
-                    // This branch would recover the account previously bound to the secret, and the corresponding balance.
-                    that.account.keypair = utils.keyPairFromSecret(secret); 
-                    that.syncAccountState();
-                    resolve();
                 }
             });
         };
