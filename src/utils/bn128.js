@@ -39,7 +39,10 @@ bn128.serialize = (point) => {
 bn128.unserialize = (serialization) => {
     if (serialization[0] == "0x0000000000000000000000000000000000000000000000000000000000000000" && serialization[1] == "0x0000000000000000000000000000000000000000000000000000000000000000")
         return bn128.zero;
-    return bn128.curve.point(serialization[0].slice(2), serialization[1].slice(2)); // no check if valid curve point?
+    var point = bn128.curve.point(serialization[0].slice(2), serialization[1].slice(2)); // no check if valid curve point?
+    if (!bn128.curve.validate(point))
+        throw new Error("Invalid public key (not on curve).");
+    return point;
 };
 
 bn128.representation = (point) => {

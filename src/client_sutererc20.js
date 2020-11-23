@@ -23,6 +23,7 @@ class ClientSuterERC20 extends ClientBase {
             that.erc20Token.methods.approve(that.suter.options.address, value * that.unit)
                 .send({from: that.home, gas: that.gasLimit})
                 .then((receipt) => {
+                    console.log("ERC20 tokens approved. Start deposit...");
                     that.suter.methods.fund(account.publicKeySerialized(), value)
                         .send({from: that.home, gas: that.gasLimit})
                         .on('transactionHash', (hash) => {

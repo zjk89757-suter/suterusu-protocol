@@ -171,13 +171,19 @@ class ClientBase {
                 return bn128.bytes(this.keypair['x']);
             };
 
-            this.publicKeyHash = () => {
-                var encoded = ABICoder.encodeParameter("bytes32[2]", this.publicKeySerialized());
-                return soliditySha3(encoded); 
-            };
+            //this.publicKeyHash = () => {
+                //var encoded = ABICoder.encodeParameter("bytes32[2]", this.publicKeySerialized());
+                //return soliditySha3(encoded); 
+            //};
 
         };
 
+    }
+
+    static async registered (suter, pubKey) {
+        var encoded = ABICoder.encodeParameter("bytes32[2]", pubKey);
+        var hashedKey = soliditySha3(encoded);
+        return await suter.methods.registered(hashedKey).call();
     }
 
     /**
@@ -289,32 +295,35 @@ class ClientBase {
             } else {
                 that.account.keypair = utils.keypairFromSecret(secret);
             }
-            var isRegistered;
-            (async function() {
-                isRegistered = await that.suter.methods.registered(that.account.publicKeyHash()).call();
-            })(); 
-            if (isRegistered) {
-                // This branch would recover the account previously bound to the secret, and the corresponding balance.
-                that.syncAccountState();
-                resolve();
-            } else {
+            //var isRegistered;
+            //(async function() {
+                //isRegistered = Client.registered(that.suter, that.account.publicKeySerialized()); 
+            //})(); 
+            ClientBase.registered(that.suter, that.account.publicKeySerialized())
+                .then(result => {
+                    if (result) {
+                        // This branch would recover the account previously bound to the secret, and the corresponding balance.
+                        that.syncAccountState();
+                        resolve();
+                    } else {
 
-                var [c, s] = utils.sign(that.suter._address, that.account.keypair);
-                that.suter.methods.register(that.account.publicKeySerialized(), c, s)
-                    .send({from: that.home, gas: that.gasLimit})
-                    .on('transactionHash', (hash) => {
-                        console.log("Registration submitted (txHash = \"" + hash + "\").");
-                    })
-                    .on('receipt', (receipt) => {
-                        console.log("Registration successful.");
-                        resolve(receipt);
-                    })
-                    .on('error', (error) => {
-                        that.account.keypair = undefined;
-                        console.log("Registration failed: " + error);
-                        reject(error);
-                    });
-            }
+                        var [c, s] = utils.sign(that.suter._address, that.account.keypair);
+                        that.suter.methods.register(that.account.publicKeySerialized(), c, s)
+                            .send({from: that.home, gas: that.gasLimit})
+                            .on('transactionHash', (hash) => {
+                                console.log("Registration submitted (txHash = \"" + hash + "\").");
+                            })
+                            .on('receipt', (receipt) => {
+                                console.log("Registration successful.");
+                                resolve(receipt);
+                            })
+                            .on('error', (error) => {
+                                that.account.keypair = undefined;
+                                console.log("Registration failed: " + error);
+                                reject(error);
+                            });
+                    }
+                });
         });
     }
 
@@ -432,7 +441,7 @@ class ClientBase {
 
     @return A promise that is resolved (or rejected) with the execution status of the deposit transaction. 
     */
-    transfer (receiver, value) {
+    async transfer (receiver, value) {
         /*
         Estimation of running time for a transfer.
         */
@@ -456,6 +465,12 @@ class ClientBase {
         var that = this;
         that.checkRegistered();
         that.checkValue();
+        
+        // Check that the receiver is also registered
+        let receiverRegistered = await ClientBase.registered(that.suter, receiver);
+        if (!receiverRegistered)
+            throw new Error("Receiver has not been registered!");
+
         var account = that.account;
         var state = account.update();
         if (value > account.balance())
@@ -492,7 +507,7 @@ class ClientBase {
 
         receiver = bn128.unserialize(receiver);
         if (bn128.pointEqual(receiver, account.publicKey()))
-            throw "Sending to yourself is currently unsupported.";
+            throw new Error("Sending to yourself is currently unsupported.");
 
         var y = [account.publicKey()].concat([receiver]);
         var index = [0, 1]; 
@@ -503,64 +518,120 @@ class ClientBase {
         }
 
         var serializedY = y.map(bn128.serialize);
-        return new Promise((resolve, reject) => {
-            that.suter.methods.getBalance(serializedY, that._getEpoch())
-                .call()
-                .then((result) => {
 
-                    var unserialized = result.map((ct) => elgamal.unserialize(ct)); 
-                    if (unserialized.some((ct) => ct[0].eq(bn128.zero) && ct[1].eq(bn128.zero)))
-                        return reject(new Error("Please make sure both sender and receiver are registered."));
+        let encBalances = await that.suter.methods.getBalance(serializedY, that._getEpoch()).call();
 
-                    var r = bn128.randomScalar();
+        var unserialized = encBalances.map((ct) => elgamal.unserialize(ct)); 
+        if (unserialized.some((ct) => ct[0].eq(bn128.zero) && ct[1].eq(bn128.zero)))
+            throw new Error("Please make sure both sender and receiver are registered.");
 
-                    var ciphertexts = []; 
-                    ciphertexts[index[0]] = elgamal.encrypt(new BN(-value), y[index[0]], r); 
-                    ciphertexts[index[1]] = elgamal.encrypt(new BN(value), y[index[1]], r); 
+        var r = bn128.randomScalar();
 
-                    var C = [ciphertexts[0][0], ciphertexts[1][0]];
-                    var D = ciphertexts[0][1]; // same as ciphertexts[1][1]
-                    var CL = unserialized.map((ct, i) => ct[0].add(C[i]));
-                    var CR = unserialized.map((ct) => ct[1].add(D));
+        var ciphertexts = []; 
+        ciphertexts[index[0]] = elgamal.encrypt(new BN(-value), y[index[0]], r); 
+        ciphertexts[index[1]] = elgamal.encrypt(new BN(value), y[index[1]], r); 
 
-                    var proof = that.service.proveTransfer(
-                        CL, CR, 
-                        C, D, 
-                        y, 
-                        state.lastRollOver, 
-                        account.privateKey(), 
-                        r, 
-                        value,
-                        state.available - value,
-                        index
-                    );
+        var C = [ciphertexts[0][0], ciphertexts[1][0]];
+        var D = ciphertexts[0][1]; // same as ciphertexts[1][1]
+        var CL = unserialized.map((ct, i) => ct[0].add(C[i]));
+        var CR = unserialized.map((ct) => ct[1].add(D));
 
-                    var u = bn128.serialize(utils.u(state.lastRollOver, account.privateKey()));
+        var proof = that.service.proveTransfer(
+            CL, CR, 
+            C, D, 
+            y, 
+            state.lastRollOver, 
+            account.privateKey(), 
+            r, 
+            value,
+            state.available - value,
+            index
+        );
 
-                    C = C.map(bn128.serialize);
-                    D = bn128.serialize(D);
+        var u = bn128.serialize(utils.u(state.lastRollOver, account.privateKey()));
 
-                    that.suter.methods.transfer(C, D, serializedY, u, proof)
-                        .send({from: that.home, gas: that.gasLimit})
-                        .on('transactionHash', (hash) => {
-                            that._transfers.add(hash);
-                            console.log("Transfer submitted (txHash = \"" + hash + "\")");
-                        })
-                        .on('receipt', (receipt) => {
-                            account._state = account.update();
-                            account._state.nonceUsed = true;
-                            account._state.pending -= value;
-                            console.log("Transfer of " + value + " was successful. Balance now " + account.balance() + ".");
-                            console.log("--- Transfer uses gas: " + receipt["gasUsed"]);
-                            resolve(receipt);
-                        })
-                        .on('error', (error) => {
-                            console.log("Transfer failed: " + error);
-                            reject(error);
-                        });
+        C = C.map(bn128.serialize);
+        D = bn128.serialize(D);
 
+        let transaction = 
+            that.suter.methods.transfer(C, D, serializedY, u, proof)
+                .send({from: that.home, gas: that.gasLimit})
+                .on('transactionHash', (hash) => {
+                    that._transfers.add(hash);
+                    console.log("Transfer submitted (txHash = \"" + hash + "\")");
+                })
+                .on('receipt', (receipt) => {
+                    account._state = account.update();
+                    account._state.nonceUsed = true;
+                    account._state.pending -= value;
+                    console.log("Transfer of " + value + " was successful. Balance now " + account.balance() + ".");
+                    console.log("--- Transfer uses gas: " + receipt["gasUsed"]);
+                })
+                .on('error', (error) => {
+                    console.log("Transfer failed: " + error);
+                    throw new Error(error);
                 });
-        });
+        return transaction;
+
+
+        //return new Promise((resolve, reject) => {
+            //that.suter.methods.getBalance(serializedY, that._getEpoch())
+                //.call()
+                //.then((result) => {
+
+                    //var unserialized = result.map((ct) => elgamal.unserialize(ct)); 
+                    //if (unserialized.some((ct) => ct[0].eq(bn128.zero) && ct[1].eq(bn128.zero)))
+                        //return reject(new Error("Please make sure both sender and receiver are registered."));
+
+                    //var r = bn128.randomScalar();
+
+                    //var ciphertexts = []; 
+                    //ciphertexts[index[0]] = elgamal.encrypt(new BN(-value), y[index[0]], r); 
+                    //ciphertexts[index[1]] = elgamal.encrypt(new BN(value), y[index[1]], r); 
+
+                    //var C = [ciphertexts[0][0], ciphertexts[1][0]];
+                    //var D = ciphertexts[0][1]; // same as ciphertexts[1][1]
+                    //var CL = unserialized.map((ct, i) => ct[0].add(C[i]));
+                    //var CR = unserialized.map((ct) => ct[1].add(D));
+
+                    //var proof = that.service.proveTransfer(
+                        //CL, CR, 
+                        //C, D, 
+                        //y, 
+                        //state.lastRollOver, 
+                        //account.privateKey(), 
+                        //r, 
+                        //value,
+                        //state.available - value,
+                        //index
+                    //);
+
+                    //var u = bn128.serialize(utils.u(state.lastRollOver, account.privateKey()));
+
+                    //C = C.map(bn128.serialize);
+                    //D = bn128.serialize(D);
+
+                    //that.suter.methods.transfer(C, D, serializedY, u, proof)
+                        //.send({from: that.home, gas: that.gasLimit})
+                        //.on('transactionHash', (hash) => {
+                            //that._transfers.add(hash);
+                            //console.log("Transfer submitted (txHash = \"" + hash + "\")");
+                        //})
+                        //.on('receipt', (receipt) => {
+                            //account._state = account.update();
+                            //account._state.nonceUsed = true;
+                            //account._state.pending -= value;
+                            //console.log("Transfer of " + value + " was successful. Balance now " + account.balance() + ".");
+                            //console.log("--- Transfer uses gas: " + receipt["gasUsed"]);
+                            //resolve(receipt);
+                        //})
+                        //.on('error', (error) => {
+                            //console.log("Transfer failed: " + error);
+                            //reject(error);
+                        //});
+
+                //});
+        //});
 
     }
 
