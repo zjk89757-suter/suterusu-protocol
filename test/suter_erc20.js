@@ -10,6 +10,7 @@ contract("SuterERC20", async (accounts) => {
         let suter = (await SuterERC20.deployed()).contract;
         let erc20Token = (await TestERC20Token.deployed()).contract; 
         alice = new Client(web3, suter, accounts[0], erc20Token);
+        await alice.init();
         await alice.register();
         assert.exists(
             alice.account.keypair,
@@ -73,6 +74,7 @@ contract("SuterERC20", async (accounts) => {
         let suter = (await SuterERC20.deployed()).contract;
         let erc20Token = (await TestERC20Token.deployed()).contract;
         bob = new Client(web3, suter, accounts[1], erc20Token);
+        await bob.init();
         await bob.register();
         await alice.transferToClient(bob, 30);
         let aliceBalance = await alice.readBalanceFromContract();

@@ -33,32 +33,32 @@ class ClientBase {
         this.web3 = web3;
         this.suter = suter;
         this.home = home;
+    }
+
+    async init() {
 
         // 'this' is special in Javascript compared to other languages, it does NOT refer to the Client object when inside some context. 
         // So better use an alias to fix our reference to the Client object.
         // Reference: https://stackoverflow.com/questions/20279484/how-to-access-the-correct-this-inside-a-callback
         var that = this;
 
-        this.service = new Service();
+        that.service = new Service();
 
-        this.gasLimit = 5470000;
+        that.gasLimit = 5470000;
 
         // TODO: set transaction confirmation blocks for testing?
         // Reference: https://github.com/ethereum/web3.js/issues/2666
         // This option is only available in web3 1.3.0, but not in 1.2.1
         // web3.transactionConfirmationBlocks = 1;
 
-        (async function() {
-            that.epochLength = await that.suter.methods.epochLength().call();
+        that.epochLength = await that.suter.methods.epochLength().call();
 
-            // The amount of tokens represented by one unit.
-            // Most of the time, one token is too small and it is not worthwhile to use private 
-            // transaction for such small amount. Hence in Suter, we contrain all private operations 
-            // to take place in terms of unit that can represent a large amount of tokens. For example,
-            // a reasonable choice of 1 unit could be 1e16 wei (0.01 ETH).
-            that.unit = await that.suter.methods.unit().call();
-        })();
-
+        // The amount of tokens represented by one unit.
+        // Most of the time, one token is too small and it is not worthwhile to use private 
+        // transaction for such small amount. Hence in Suter, we contrain all private operations 
+        // to take place in terms of unit that can represent a large amount of tokens. For example,
+        // a reasonable choice of 1 unit could be 1e16 wei (0.01 ETH).
+        that.unit = await that.suter.methods.unit().call();
 
         this._transfers = new Set();
 

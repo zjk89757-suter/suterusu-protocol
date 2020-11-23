@@ -8,6 +8,7 @@ contract("SuterETH", async (accounts) => {
     it("should allow register", async () => {
         let suter = (await SuterETH.deployed()).contract;
         alice = new Client(web3, suter, accounts[0]);
+        await alice.init();
         await alice.register();
         assert.exists(
             alice.account.keypair,
@@ -53,6 +54,7 @@ contract("SuterETH", async (accounts) => {
     it("should allow transfer", async () => {
         let suter = (await SuterETH.deployed()).contract;
         bob = new Client(web3, suter, accounts[1]);
+        await bob.init();
         await bob.register();
         await alice.transferToClient(bob, 30);
         let aliceBalance = await alice.readBalanceFromContract();
