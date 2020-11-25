@@ -35,6 +35,9 @@ class ClientBase {
         this.home = home;
     }
 
+    /**
+    Need a separate initialization method by design because we want the async/await feature which can not be used for a constructor.
+    */
     async init() {
 
         // 'this' is special in Javascript compared to other languages, it does NOT refer to the Client object when inside some context. 
@@ -228,19 +231,14 @@ class ClientBase {
     
     @return A promise that is resolved with the balance.
     */
-    readBalanceFromContract () {
+    async readBalanceFromContract () {
         var that = this;
         that.checkRegistered();
-        return new Promise((resolve, reject) => {
-            that.suter.methods.getBalance([that.account.publicKeySerialized()], that._getEpoch() + 1)
-                .call()
-                .then((result) => {
-                    var encBalance = elgamal.unserialize(result[0]);
-                    var balance = elgamal.decrypt(encBalance, that.account.privateKey());
-                    console.log("Read balance successfully: " + balance);
-                    resolve(balance);
-                });
-        });
+        let encBalances = await that.suter.methods.getBalance([that.account.publicKeySerialized()], that._getEpoch() + 1).call();
+        var encBalance = elgamal.unserialize(encBalances[0]);
+        var balance = elgamal.decrypt(encBalance, that.account.privateKey());
+        console.log("Read balance successfully: " + balance);
+        return balance;
     }
 
     /**
@@ -249,28 +247,22 @@ class ClientBase {
     
     @return A promise.
     */
-    syncAccountState () {
+    async syncAccountState () {
         var that = this;
         that.checkRegistered();
-        return new Promise((resolve, reject) => {
-            that.suter.methods.getAccountState(that.account.publicKeySerialized())
-                .call()
-                .then((result) => {
-                    var encAvailable = elgamal.unserialize(result['y_available']);
-                    var encPending = elgamal.unserialize(result['y_pending']);
-                    that.account.setAvailable(
-                        elgamal.decrypt(encAvailable, that.account.privateKey())
-                    );
-                    that.account.setPending(
-                        elgamal.decrypt(encPending, that.account.privateKey())
-                    );
-                    that.account._state.lastRollOver = that._getEpoch();
-                    that.account._state.nonceUsed = false;
+        let encState = await that.suter.methods.getAccountState(that.account.publicKeySerialized()).call();
+        var encAvailable = elgamal.unserialize(encState['y_available']);
+        var encPending = elgamal.unserialize(encState['y_pending']);
+        that.account.setAvailable(
+            elgamal.decrypt(encAvailable, that.account.privateKey())
+        );
+        that.account.setPending(
+            elgamal.decrypt(encPending, that.account.privateKey())
+        );
+        that.account._state.lastRollOver = that._getEpoch();
+        that.account._state.nonceUsed = false;
 
-                    console.log("Account synchronized with contract: available = " + that.account.available() + ", pending = " + that.account.pending());
-                    resolve();
-                });
-        });
+        console.log("Account synchronized with contract: available = " + that.account.available() + ", pending = " + that.account.pending());
     }
 
     /**
@@ -287,44 +279,34 @@ class ClientBase {
     @return A promise that is resolved (or rejected) with the execution status of the
         registraction transaction.
     */
-    register (secret) {
+    async register (secret) {
         var that = this;
-        return new Promise((resolve, reject) => {
-            if (secret === undefined) {
-                that.account.keypair = utils.createAccount();
-            } else {
-                that.account.keypair = utils.keypairFromSecret(secret);
-            }
-            //var isRegistered;
-            //(async function() {
-                //isRegistered = Client.registered(that.suter, that.account.publicKeySerialized()); 
-            //})(); 
-            ClientBase.registered(that.suter, that.account.publicKeySerialized())
-                .then(result => {
-                    if (result) {
-                        // This branch would recover the account previously bound to the secret, and the corresponding balance.
-                        that.syncAccountState();
-                        resolve();
-                    } else {
+        if (secret === undefined) {
+            that.account.keypair = utils.createAccount();
+        } else {
+            that.account.keypair = utils.keypairFromSecret(secret);
+        }
+        let isRegistered = await ClientBase.registered(that.suter, that.account.publicKeySerialized());
+        if (isRegistered) {
+            // This branch would recover the account previously bound to the secret, and the corresponding balance.
+            return await that.syncAccountState();
+        } else {
 
-                        var [c, s] = utils.sign(that.suter._address, that.account.keypair);
-                        that.suter.methods.register(that.account.publicKeySerialized(), c, s)
-                            .send({from: that.home, gas: that.gasLimit})
-                            .on('transactionHash', (hash) => {
-                                console.log("Registration submitted (txHash = \"" + hash + "\").");
-                            })
-                            .on('receipt', (receipt) => {
-                                console.log("Registration successful.");
-                                resolve(receipt);
-                            })
-                            .on('error', (error) => {
-                                that.account.keypair = undefined;
-                                console.log("Registration failed: " + error);
-                                reject(error);
-                            });
-                    }
+            var [c, s] = utils.sign(that.suter._address, that.account.keypair);
+            let transaction = that.suter.methods.register(that.account.publicKeySerialized(), c, s)
+                .send({from: that.home, gas: that.gasLimit})
+                .on('transactionHash', (hash) => {
+                    console.log("Registration submitted (txHash = \"" + hash + "\").");
+                })
+                .on('receipt', (receipt) => {
+                    console.log("Registration successful.");
+                })
+                .on('error', (error) => {
+                    that.account.keypair = undefined;
+                    console.log("Registration failed: " + error);
                 });
-        });
+            return transaction;
+        }
     }
 
 
@@ -342,7 +324,7 @@ class ClientBase {
 
     @return A promise that is resolved (or rejected) with the execution status of the deposit transaction.
     */
-    deposit (value) {
+    async deposit (value) {
         throw new Error("Deposit not implemented.");
     }
 
@@ -359,14 +341,14 @@ class ClientBase {
 
     @return A promise that is resolved (or rejected) with the execution status of the deposit transaction.
     */
-    withdraw (value) {
+    async withdraw (value) {
         var that = this;
         that.checkRegistered();
         that.checkValue();
         var account = that.account;
         var state = account.update();
         if (value > account.balance())
-            throw "Requested withdrawal amount of " + value + " exceeds account balance of " + account.balance() + ".";
+            throw new Error("Requested withdrawal amount of " + value + " exceeds account balance of " + account.balance() + ".");
         var wait = that._away();
         var seconds = Math.ceil(wait / 1000);
         var plural  = seconds == 1 ? "" : "s";
@@ -392,41 +374,35 @@ class ClientBase {
             return sleep(wait).then(() => this.withdraw(value));
         }
 
-        return new Promise((resolve, reject) => {
-            that.suter.methods.getBalance([account.publicKeySerialized()], that._getEpoch())
-                .call()
-                .then((result) => {
-                    var encBalance = elgamal.unserialize(result[0]);
-                    var encNewBalance = elgamal.serialize(elgamal.subPlain(encBalance, value));
-                    var proof = that.service.proveBurn(
-                        encNewBalance[0], 
-                        encNewBalance[1], 
-                        account.publicKeySerialized(), 
-                        state.lastRollOver, 
-                        that.home, 
-                        account.privateKey(),
-                        state.available - value
-                    ); 
-                    var u = bn128.serialize(utils.u(state.lastRollOver, account.privateKey()));
-                    that.suter.methods.burn(account.publicKeySerialized(), value, u, proof)
-                        .send({from: that.home, gas: that.gasLimit})
-                        .on('transactionHash', (hash) => {
-                            console.log("Withdrawal submitted (txHash = \"" + hash + "\").");
-                        })
-                        .on('receipt', (receipt) => {
-                            account._state = account.update();
-                            account._state.nonceUsed = true;
-                            account._state.pending -= value;
-                            console.log("Withdrawal of " + value + " was successful. Balance now " + account.balance() + ".");
-                            console.log("--- Withdrawal uses gas: " + receipt["gasUsed"]);
-                            resolve(receipt);
-                        })
-                        .on('error', (error) => {
-                            console.log("Withdrawal failed: " + error);
-                            reject(error);
-                        });
-                });
-        });
+        let encBalances = await that.suter.methods.getBalance([account.publicKeySerialized()], that._getEpoch()).call();
+        var encBalance = elgamal.unserialize(encBalances[0]);
+        var encNewBalance = elgamal.serialize(elgamal.subPlain(encBalance, value));
+        var proof = that.service.proveBurn(
+            encNewBalance[0], 
+            encNewBalance[1], 
+            account.publicKeySerialized(), 
+            state.lastRollOver, 
+            that.home, 
+            account.privateKey(),
+            state.available - value
+        ); 
+        var u = bn128.serialize(utils.u(state.lastRollOver, account.privateKey()));
+        let transaction = that.suter.methods.burn(account.publicKeySerialized(), value, u, proof)
+            .send({from: that.home, gas: that.gasLimit})
+            .on('transactionHash', (hash) => {
+                console.log("Withdrawal submitted (txHash = \"" + hash + "\").");
+            })
+            .on('receipt', (receipt) => {
+                account._state = account.update();
+                account._state.nonceUsed = true;
+                account._state.pending -= value;
+                console.log("Withdrawal of " + value + " was successful. Balance now " + account.balance() + ".");
+                console.log("--- Withdrawal uses gas: " + receipt["gasUsed"]);
+            })
+            .on('error', (error) => {
+                console.log("Withdrawal failed: " + error);
+            });
+        return transaction;
     }
 
     /**
@@ -647,7 +623,7 @@ class ClientBase {
 
     @return A promise that is resolved (or rejected) with the execution status of the deposit transaction. 
     */
-    transferToClient (receiver, value) {
+    async transferToClient (receiver, value) {
         return this.transfer(receiver.account.publicKeySerialized(), value);
     }
 
