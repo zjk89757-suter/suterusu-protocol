@@ -16,7 +16,8 @@ Register the Suterusu public key, and initialize the corresponding account statu
 Create a transaction to convert a specified amount of the user's ERC20 tokens to an equivalent amount of encrypted Suterusu ERC20 tokens.
 
 #### [Backend](https://github.com/zjk89757-suter/hi/blob/3ddb1e84740716ed88af368a847782b9162fd6b1/contracts/SuterERC20.sol#L18)
-Add the specified amount to the account's encrypted balance.
+1. Add the specified amount to the account's encrypted balance.
+2. Transfer the specified amount of ERC20 tokens from the message sender to the contract. 
 
 
 ## Transfer
@@ -24,14 +25,17 @@ Add the specified amount to the account's encrypted balance.
 Create a transaction to transfer a specified amount of the user's ERC20 tokens from the current user to a receiver. Note that the transaction will include necessary cryptographic zero-knowledge proof to guarantee that this is a ***valid*** transfer operation.
 
 #### [Backend](https://github.com/zjk89757-suter/hi/blob/3ddb1e84740716ed88af368a847782b9162fd6b1/contracts/SuterBase.sol#L170)
-Transfer a specified encrypted amount of balance from a sender to a receiver, and verify that this operation is valid: the sender has sufficient balance, and the same amount is deducted from the sender's account and added to the receiver's account.
+1. Verify that this operation is valid: the sender has sufficient balance, and the same amount is deducted from the sender's account and added to the receiver's account.
+2. Transfer a specified encrypted amount of balance from a sender to a receiver
 
 ## Burn
 #### [Frontend](https://github.com/zjk89757-suter/hi/blob/3ddb1e84740716ed88af368a847782b9162fd6b1/src/client_base.js#L344)
 Create a transaction to convert a specified amount of the user's encrypted Suterusu ERC20 tokens back to an equivalent amount of plain ERC20 tokens. Note that the transaction will include necessary cryptographic zero-knowledge proof to guarantee that this is a **valid** burn operation. 
 
-#### [Backend](https://github.com/zjk89757-suter/hi/blob/3ddb1e84740716ed88af368a847782b9162fd6b1/contracts/SuterBase.sol#L147)
-Deduct the specified amount of tokens from the account's encrypted balance, and verify that this operation is valid: the account has sufficient balance.
+#### [Backend](https://github.com/zjk89757-suter/hi/blob/af7e5bf6d7f76760047b1aeec279047e91e31a68/contracts/SuterERC20.sol#L27)
+1. Verify that this operation is valid: the account has sufficient balance.
+2. Deduct the specified amount of tokens from the account's encrypted balance;
+3. Transfer the specified amount of ERC20 tokens from the contract to the message sender. 
 
 
 # Environment Setup
