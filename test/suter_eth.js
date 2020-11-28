@@ -1,5 +1,5 @@
 const SuterETH = artifacts.require('SuterETH');
-const Client = require('../src/client_sutereth.js');
+const Client = require('../lib/client_sutereth.js');
 
 contract("SuterETH", async (accounts) => {
     let alice;

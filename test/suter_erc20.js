@@ -1,6 +1,6 @@
 const SuterERC20 = artifacts.require('SuterERC20');
 const TestERC20Token = artifacts.require('TestERC20Token');
-const Client = require('../src/client_sutererc20.js');
+const Client = require('../lib/client_sutererc20.js');
 
 contract("SuterERC20", async (accounts) => {
     let alice;
