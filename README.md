@@ -83,3 +83,23 @@ truffle migrate --reset
 truffle test
 ```
 
+
+# Local Installation of Suterusu Client
+Git clone the repository:
+```bash
+git clone https://github.com/zjk89757-suter/Suterusu-Protocol.git
+```
+
+Link the Sutersusu module to the global `node_modules` directory:
+```bash
+cd Suterusu-Protocol
+npm link
+```
+
+In any project where you want to use Suterusu, link the globally installed Suterusu to the local `node_modules` directory:
+```bash
+## Run this command in your other project root
+npm link suterusu 
+```
+
+
