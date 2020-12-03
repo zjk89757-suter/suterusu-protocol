@@ -81,4 +81,49 @@ contract("SuterETH", async (accounts) => {
         );
     });
 
+    it("should allow account recovery", async () => {
+        let suter = (await SuterETH.deployed()).contract;
+        let eve = new Client(web3, suter, accounts[2]);
+        await eve.init();
+        await eve.register("test secret");
+        assert.exists(
+            eve.account.keypair,
+            "Registration failed"
+        );
+
+        await eve.deposit(1);
+        let balance = await eve.readBalanceFromContract();
+        assert.equal(
+            balance,
+            1,
+            "Wrong balance"
+        );
+        let localTrackedBalance = eve.account.balance();
+        assert.equal(
+            balance,
+            localTrackedBalance,
+            "Contract balance does not match locally tracked balance"
+        );
+
+        await eve.withdraw(balance); 
+        let balance1 = eve.account.balance();
+        let balance2 = await eve.readBalanceFromContract(); 
+        assert.equal(
+            balance1,
+            0,
+            "Wrong locally tracked balance after withdrawing"
+        );
+        assert.equal(
+            balance2,
+            0,
+            "Wrong contract balance after withdrawing"
+        );
+
+        // Recover the account
+        let new_eve = new Client(web3, suter, accounts[2]);
+        await new_eve.init();
+        await new_eve.register("test secret");
+        await new_eve.deposit(100);
+    });
+
 });
